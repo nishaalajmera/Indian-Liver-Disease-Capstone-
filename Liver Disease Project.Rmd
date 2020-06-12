@@ -1,0 +1,331 @@
+---
+title: "Liver Disease Capstone"
+author: "Nishaal Ajmera"
+date: "05/06/2020"
+output: pdf_document
+---
+# Introduction
+Over the years, patients with liver disease have been on the rise. Factors contributing to this include increased alcohol consumption, drugs consumption, unhealthy and fatty foods and inhalation of toxins. This dataset was obtained patients records in the North East of Andhra Pradesh, India. The original dataset has 416 liver disease patients and 167 non-liver disease patients. The data has been modified to remove NA's and it contains 414 liver disease patients and 165 non-liver disease patients. The dataset contains 11 variables (Age,Gender,Total Bilirubin, Direct Bilirubin,Alkaline Phosphotase,Alamine Aminotransferase, Aspartate Aminotransferase, Total Proteins, Albumin, Albumin to Globulin Ratio). The final "Dataset" variable is used to distinguish between liver disease patients (1) and non-liver disease patients (2).   
+The key goals of this project are:    
+• to help doctors diagnose patients with liver disease    
+• to investigate best machine learning model to predict patients with liver disease accurately
+
+# Obtaining Data
+This section shows the required packages and how the data can be obtained
+```{r Installing required packages and Data}
+#Packages
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(gridExtra)) install.packages("gridExtra",repos="https://cran.rstudio.com/bin/macosx/el-capitan/contrib/3.6/gridExtra_2.3.tgz")
+if(!require(rpart)) install.packages("rpart",repos= "http://cran.us.r-project.org")
+
+#Getting the dataset
+liverurl="https://raw.githubusercontent.com/nishaalajmera/Indian-Liver-Disease-Capstone-/master/indian_liver_patient.csv"
+liverdis<-read_csv(url(liverurl)) #reading and saving file from url into workable format
+```
+
+# Data Modification
+The Dataset is modified for smooth analysis 
+```{r Basics and Modification of Data  }
+head(liverdis) #Looking at first few rows of the dataset
+dim(liverdis) #checking dimensions of the dataset
+
+liverdis<- na.omit(liverdis) #remove any rows with missing data
+dim(liverdis) #now there is a total of 579 patients
+liver_patients<- liverdis %>% filter(Dataset=="1") %>% count() #count liver patients
+non_liver_patients<- liverdis %>% filter(Dataset=="2") %>% count() #count non-liver patients
+liver_patients
+non_liver_patients
+
+#Convert Dataset to 1 and 2 to factors for easier analysis 
+liverdis$Dataset<- as.factor(liverdis$Dataset)
+class(liverdis$Dataset) #checking the class of Dataset column
+
+#Analysing basic summary statistics of the dataset
+summary(liverdis)
+```
+
+# Exploratory Analysis 
+Liver patients and non-liver patients segregated by Gender 
+```{r Counts and Gender}
+#Number of people with liver disease and no liver disease
+b1<- liverdis %>% ggplot(aes(Dataset)) + geom_bar()
+#Number of people with liver disease and no liver diseases according to gender
+b2<- qplot(Dataset,data=liverdis,fill=Gender)
+
+grid.arrange(b1,b2,ncol=2)
+```
+   
+It is observed that in both groups there are less female patients compared to male patients
+
+### Distribution
+The distribution of each continuous variable is shown below. 
+```{r Distribution of Variables}
+#Distribution 
+d1<- liverdis %>% ggplot(aes(x=Age))+ geom_histogram(binwidth=4, color="black") + ggtitle("Age")+xlab("")
+d2<- liverdis %>% ggplot(aes(x=Total_Bilirubin)) + geom_histogram(binwidth=4, colour="black") + ggtitle("Total Bilirubin")+xlab("")
+d3<- liverdis %>% ggplot(aes(x=Direct_Bilirubin)) + geom_histogram(binwidth=2, colour="black") + ggtitle("Direct Bilirubin")+xlab("")
+d4<- liverdis %>% ggplot(aes(x=Alkaline_Phosphotase)) + geom_histogram(bins=30, colour="black") + ggtitle("Alkaline Phosphatase")+xlab("")
+d5<- liverdis %>% ggplot(aes(x=Alamine_Aminotransferase)) + geom_histogram(bins=30, colour="black") + ggtitle("Alamine Aminotransferase")+xlab("")
+d6<- liverdis %>% ggplot(aes(x=Aspartate_Aminotransferase)) + geom_histogram(bins=30, colour="black") + ggtitle("Aspartate Aminotransferase")+xlab("")
+d7<- liverdis %>% ggplot(aes(x=Total_Protiens)) + geom_histogram(bins=30, colour="black") + ggtitle("Total Proteins")+xlab("")
+d8<-liverdis %>% ggplot(aes(x=Albumin)) + geom_histogram(bins=30, colour="black") + ggtitle("Albumin")+xlab("")
+d9<- liverdis %>% ggplot(aes(x=Albumin_and_Globulin_Ratio)) + geom_histogram(bins=20, colour="black") + ggtitle("Albumin:Globulin")+xlab("")
+grid.arrange(d1,d2,d3,d4,d5,d6,d7,d8,d9)
+```
+   
+   Some variables such as: Total Bilirubin, Direct Bilirubin, Alkaline Phophatase, Alamine Aminotransferase and Aspartate Aminotransferase have skewed distributions. This might be due to some clustering suggesting that the levels could be higher in one of the patient groups.
+
+
+### Normal Distribution Test
+Shapiro-Wilk test is used here to check if continuous variables follow a normal distribution.   
+Null Hypothesis: Continuous variable follows a distribution pattern similar to normal distribution   
+Alternative Hypothesis: Continuous variable does not follow normal distribution
+```{r Normality Test using Shapiro-wilk test}
+#Checking for normality using Shapiro-Wilk Test for continuous variables 
+shapiro.test(liverdis$Age)$p.value
+shapiro.test(liverdis$Total_Bilirubin)$p.value
+shapiro.test(liverdis$Direct_Bilirubin)$p.value
+shapiro.test(liverdis$Alkaline_Phosphotase)$p.value
+shapiro.test(liverdis$Alamine_Aminotransferase)$p.value
+shapiro.test(liverdis$Aspartate_Aminotransferase)$p.value
+shapiro.test(liverdis$Total_Protiens)$p.value
+shapiro.test(liverdis$Albumin)$p.value
+shapiro.test(liverdis$Albumin_and_Globulin_Ratio)$p.value
+```
+   
+P-values for all variables are less than 0.05 therefore the null hypothesis is rejected.   Going forward, non-parametric tests will be used to assess the statistical signficance of the the data. Therefore median will be used as measure of central tendency and interquartile range will explain the variability of the data.
+
+### Data Analysis between the two groups of data; liver disease patients and non-liver disease patients 
+1 represents patients with liver disease and 2 represents patients with no liver disease.   Below are boxplots to visualize any obvious differences. Log scale has been used to better visualize data. 
+```{r Boxplots}
+b1<- liverdis %>% ggplot(aes(Dataset, Age)) + geom_boxplot(aes(fill = Dataset))+theme_classic()+theme(legend.position = "none",plot.title=element_text(size=11))+xlab("")+ylab("")+ggtitle("Age")
+b2<- liverdis %>% ggplot(aes(Dataset, Total_Bilirubin)) + geom_boxplot(aes(fill = Dataset))+theme_classic()+theme(legend.position = "none",plot.title=element_text(size=11))+xlab("")+ylab("")+ggtitle("Total Bilirubin")+scale_y_log10()
+b3<- liverdis %>% ggplot(aes(Dataset, Direct_Bilirubin)) + geom_boxplot(aes(fill = Dataset))+theme_classic()+theme(legend.position = "none",plot.title=element_text(size=11))+xlab("")+ylab("")+ggtitle("Direct Bilirubin")+scale_y_log10()
+b4<- liverdis %>% ggplot(aes(Dataset,Alkaline_Phosphotase)) + geom_boxplot(aes(fill = Dataset))+theme_classic()+theme(legend.position = "none",plot.title=element_text(size=11))+xlab("")+ylab("")+ggtitle("Alkaline Phosphatase")+scale_y_log10()
+b5<- liverdis %>% ggplot(aes(Dataset, Alamine_Aminotransferase)) + geom_boxplot(aes(fill = Dataset))+theme_classic()+theme(legend.position = "none",plot.title=element_text(size=11))+xlab("")+ylab("")+ggtitle("Alamine Aminotransferase")+scale_y_log10()
+b6<- liverdis %>% ggplot(aes(Dataset, Aspartate_Aminotransferase)) + geom_boxplot(aes(fill = Dataset))+theme_classic()+theme(legend.position = "none",plot.title=element_text(size=11))+xlab("")+ylab("")+ggtitle("Aspartate Aminotransferase")+scale_y_log10()
+b7<- liverdis %>% ggplot(aes(Dataset, Total_Protiens)) + geom_boxplot(aes(fill = Dataset))+theme_classic()+theme(legend.position = "none",plot.title=element_text(size=11))+xlab("")+xlab("")+ylab("")+ggtitle("Total Proteins")+scale_y_log10()
+b8<- liverdis %>% ggplot(aes(Dataset, Albumin)) + geom_boxplot(aes(fill = Dataset))+theme_classic()+theme(legend.position = "none",plot.title=element_text(size=11))+xlab("")+xlab("")+ylab("")+ggtitle("Albumin")+scale_y_log10()
+b9<- liverdis %>% ggplot(aes(Dataset, Albumin_and_Globulin_Ratio)) + geom_boxplot(aes(fill = Dataset))+theme_classic()+theme(legend.position = "none",plot.title=element_text(size=11))+xlab("")+xlab("")+ylab("")+ggtitle("Albumin:Globulin")+scale_y_log10()
+grid.arrange(b1,b2,b3,b4,b5,b6,b7,b8,b9)
+```
+The median of some variables show differences in the two groups. However this has to be further assesed.
+
+### Wilcoxon Signed Ranked Test
+Wilcoxon Signed Ranked Test is a non-parametric test is used to compare two related samples. 
+```{r Wilcoxon Signed Ranked Test}
+#Displaying non-parametric measures and carrying out Wilcoxon Signed Rank Test to test for any significance between the difference in the variables between the liver disease group and non-liver disease group
+#Age
+Age<- liverdis %>% group_by(Dataset) %>% summarize(count=n(),median=median(Age),IQR=IQR(Age))
+Age_pvalue<- wilcox.test(liverdis$Age~liverdis$Dataset)$p.value
+
+#Total Bilirubin
+Total_Bilirubin<- liverdis %>% group_by(Dataset) %>% summarize(count=n(),median=median(Total_Bilirubin),IQR=IQR(Total_Bilirubin))
+Total_Bilirubin_pvalue<- wilcox.test(liverdis$Total_Bilirubin~liverdis$Dataset)$p.value
+
+#Direct Bilirubin
+Direct_Bilirubin<- liverdis %>% group_by(Dataset) %>% summarize(count=n(),median=median(Direct_Bilirubin),IQR=IQR(Direct_Bilirubin))
+Direct_Bilirubin_pvalue<- wilcox.test(liverdis$Direct_Bilirubin~liverdis$Dataset)$p.value
+
+#Alkaline Phosphatase
+Alkaline_Phosphatase<- liverdis %>% group_by(Dataset) %>% summarize(count=n(),median=median(Alkaline_Phosphotase),IQR=IQR(Alkaline_Phosphotase))
+Alkaline_Phosphatase_pvalue<- wilcox.test(liverdis$Alkaline_Phosphotase~liverdis$Dataset)$p.value
+
+#Alamine Aminotransferase
+Alamine_Aminotransferase <- liverdis %>% group_by(Dataset) %>% summarize(count=n(),median=median(Alamine_Aminotransferase),IQR=IQR(Alamine_Aminotransferase))
+Alamine_Aminotransferase_pvalue <- wilcox.test(liverdis$Alamine_Aminotransferase~liverdis$Dataset)$p.value
+
+#Aspartate Aminotransferase
+Aspartate_Aminotransferase<- liverdis %>% group_by(Dataset) %>% summarize(count=n(),median=median(Aspartate_Aminotransferase),IQR=IQR(Aspartate_Aminotransferase))
+Aspartate_Aminotransferase_pvalue<- wilcox.test(liverdis$Aspartate_Aminotransferase~liverdis$Dataset)$p.value
+
+#Total Proteins 
+Total_Proteins<- liverdis %>% group_by(Dataset) %>% summarize(count=n(),median=median(Total_Protiens),IQR=IQR(Total_Protiens))
+Total_Proteins_pvalue <- wilcox.test(liverdis$Total_Protiens~liverdis$Dataset)$p.value
+
+#Albumin
+Albumin<- liverdis %>% group_by(Dataset) %>% summarize(count=n(),median=median(Albumin),IQR=IQR(Albumin))
+Albumin_pvalue <- wilcox.test(liverdis$Albumin~liverdis$Dataset)$p.value
+
+#Albumin: Globulin
+Albumin_Globulin_ratio<- liverdis %>% group_by(Dataset) %>% summarize(count=n(),median=median(Albumin_and_Globulin_Ratio),IQR=IQR(Albumin_and_Globulin_Ratio))
+Albumin_Globulin_ratio_pvalue<- wilcox.test(liverdis$Albumin_and_Globulin_Ratio~liverdis$Dataset)$p.value
+
+Age
+Age_pvalue
+Total_Bilirubin
+Total_Bilirubin_pvalue
+Direct_Bilirubin
+Direct_Bilirubin_pvalue
+Alkaline_Phosphatase
+Alkaline_Phosphatase_pvalue
+Alamine_Aminotransferase
+Alamine_Aminotransferase_pvalue
+Aspartate_Aminotransferase
+Aspartate_Aminotransferase_pvalue
+Total_Proteins
+Total_Proteins_pvalue
+Albumin
+Albumin_pvalue
+Albumin_Globulin_ratio
+Albumin_Globulin_ratio_pvalue
+
+```
+    All p-values except Total Proteins show that there is a significance    between the liver disease and non-liver disease group.   We will try some models without Total protein checking if it improves the accuracy. 
+
+### Generating Training and Test Samples 
+```{r Train and Test Samples}
+set.seed(1,sample.kind = "Rounding")
+test_index<- createDataPartition(y=liverdis$Dataset,times=1,p=0.2,list=FALSE) #index of test set
+train_set<- liverdis[-test_index,] #generating train set
+test_set<- liverdis[test_index,] #generating test set
+```
+
+### Model 1: Logistic Regression Model
+This model uses logistic regression to predict the patient group. Here all the variables are used as predictors. 
+```{r Model 1}
+#Model 1: Logistic Regression Model (all predictors)
+fit_glm<- glm(Dataset~.,data=train_set,family="binomial") #Training algorithm
+p_hat_glm<- predict(fit_glm,test_set,type = "response") 
+y_hat_glm<- ifelse(p_hat_glm>0.5,"1","2")
+confusionMatrix(relevel(as.factor(y_hat_glm),"1"),test_set$Dataset)
+m1 <- confusionMatrix(relevel(as.factor(y_hat_glm),"1"),test_set$Dataset)$overall["Accuracy"]
+overall_accuracy <- tibble(model = "Logistic Regression with all predictors", Accuracy = m1 ) #saving model into table
+overall_accuracy
+```
+It is seen that this model gives very poor accuracy. We wil try improving the model by removing some variables.
+
+### Model 2: Logistic Regression Model 
+In this model we are only using continuous variables to predict the dataset. 
+```{r Model 2}
+#Model 2: Logistic Regression Model (continuous variables)
+fit_glm<- glm(Dataset~Age+ Total_Bilirubin + Direct_Bilirubin + Alkaline_Phosphotase + Alamine_Aminotransferase + Aspartate_Aminotransferase + Total_Protiens + Albumin + Albumin_and_Globulin_Ratio ,data=train_set,family="binomial")
+p_hat_glm<- predict(fit_glm,test_set,type = "response")
+y_hat_glm<- ifelse(p_hat_glm>0.5,"1","2")
+confusionMatrix(relevel(as.factor(y_hat_glm),"1"),test_set$Dataset)
+m2<- confusionMatrix(relevel(as.factor(y_hat_glm),"1"),test_set$Dataset)$overall["Accuracy"]
+overall_accuracy <- bind_rows(overall_accuracy, tibble(model = "Logistic Regression with 9 predictors", Accuracy = m2 ))
+overall_accuracy
+```
+This model has reduced the accuracy. 
+
+### Model 3: Logistic Regression 
+In this model, we will use the variables that have a skewed distribution. It is proposed that some the levels of some variables might be higher in a one group of patient.
+```{r Model 3}
+#Model 3: Logistic Regression using variables that have a skewed distribution 
+fit_glm<- glm(Dataset~ Total_Bilirubin + Direct_Bilirubin + Alkaline_Phosphotase + Alamine_Aminotransferase + Aspartate_Aminotransferase,data=train_set,family="binomial")
+p_hat_glm<- predict(fit_glm,test_set,type = "response")
+y_hat_glm<- ifelse(p_hat_glm>0.5,"1","2")
+confusionMatrix(relevel(as.factor(y_hat_glm),"1"),test_set$Dataset)
+m3<- confusionMatrix(relevel(as.factor(y_hat_glm),"1"),test_set$Dataset)$overall["Accuracy"]
+overall_accuracy <- bind_rows(overall_accuracy, tibble(model = "Logistic Regression with 5 predictors", Accuracy = m3 ))
+overall_accuracy
+```
+There a has been a slight improvement of 13% compared to the first logistic regression model in the accuracy. We will try using a different model to improve the predictions.
+
+### Model 4: KNN model 1 (continuous variables)
+The K-nearest neighbours model will be applied here to all the continuous variables. It is a non-parametric machine learning algorithm that is easy to apply to multiple dimensions. 
+```{r Model 4}
+#Model 4: KNN Model 1
+#Used all continuous variables 
+control<- trainControl("cv",number=10,p=.9)
+train_knn<- train( Dataset ~ Age+ Total_Bilirubin + Direct_Bilirubin + Alkaline_Phosphotase + Alamine_Aminotransferase + Aspartate_Aminotransferase + Total_Protiens + Albumin + Albumin_and_Globulin_Ratio,
+                   data = train_set, method = "knn",
+                   tuneGrid= data.frame(k=seq(9,51,2)),
+                   trControl = control)
+ggplot(train_knn,highlight=TRUE)
+train_knn$bestTune
+
+p_hat_knn <- train_knn %>% predict(test_set)
+confusionMatrix(p_hat_knn,test_set$Dataset)
+m4<-confusionMatrix(p_hat_knn,test_set$Dataset)$overall["Accuracy"] 
+overall_accuracy <- bind_rows(overall_accuracy, tibble(model = "KNN with 9 predictors", Accuracy = m4 ))
+overall_accuracy
+```
+It is seen that the accuracy improves greatly. However will try and get the accuracy as close to 100%. 
+
+### Model 5: KNN Model 2
+In this KNN model we have used on the variables that we significant in the Wilcoxon Signed Rank Test. 
+```{r Model 5}
+#Model 5: KNN Model 2
+#Used significant variables (removed Total_Protiens)
+control<- trainControl("cv",number=10,p=.9)
+train_knn<- train( Dataset ~ Age+ Total_Bilirubin + Direct_Bilirubin + Alkaline_Phosphotase + Alamine_Aminotransferase + Aspartate_Aminotransferase + Albumin + Albumin_and_Globulin_Ratio,
+                   data = train_set, method = "knn",
+                   tuneGrid= data.frame(k=seq(9,51,2)),
+                   trControl = control)
+ggplot(train_knn,highlight=TRUE)
+train_knn$bestTune
+
+p_hat_knn <- train_knn %>% predict(test_set)
+confusionMatrix(p_hat_knn,test_set$Dataset)
+m5<- confusionMatrix(p_hat_knn,test_set$Dataset)$overall["Accuracy"] 
+overall_accuracy <- bind_rows(overall_accuracy, tibble(model = "KNN with 8 predictors", Accuracy = m5 ))
+overall_accuracy
+```
+The accuracy remains the same. Therefore, we will further add some change to improve it. 
+
+### Model 6: KNN Model 3
+In this KNN model we will use the variables that have a skewed distribution.
+```{r Model 6}
+#Model 6: KNN Model 3
+#Used significant variables (using skewed distribution variables)
+control<- trainControl("cv",number=10,p=.9)
+train_knn<- train( Dataset ~ Total_Bilirubin + Direct_Bilirubin + Alkaline_Phosphotase + Alamine_Aminotransferase + Aspartate_Aminotransferase + Albumin + Albumin_and_Globulin_Ratio,
+                   data = train_set, method = "knn",
+                   tuneGrid= data.frame(k=seq(9,51,2)),
+                   trControl = control)
+ggplot(train_knn,highlight=TRUE)
+train_knn$bestTune
+
+p_hat_knn <- train_knn %>% predict(test_set)
+confusionMatrix(p_hat_knn,test_set$Dataset)
+m6<- confusionMatrix(p_hat_knn,test_set$Dataset)$overall["Accuracy"] 
+overall_accuracy <- bind_rows(overall_accuracy, tibble(model = "KNN with 7 predictors", Accuracy = m6 ))
+overall_accuracy
+```
+It is observed that the accuracy still remains the same.
+
+
+### Model 7: Classification (Decision) Trees Model 
+We will use a different algorithm. Since the outcome is categorical we will use the classification (decision) trees model. 
+```{r Model 7}
+#Model 7- Classification (Decision) Trees Model 
+train_rpart <- train(Dataset ~ .,
+                     method = "rpart",
+                     tuneGrid = data.frame(cp = seq(0.0, 0.1, len = 25)),
+                     data = train_set)
+plot(train_rpart)
+confusionMatrix(predict(train_rpart,test_set),test_set$Dataset)
+m7<- confusionMatrix(predict(train_rpart,test_set),test_set$Dataset)$overall["Accuracy"]
+overall_accuracy<- bind_rows(overall_accuracy, tibble(model="Classification Decision Trees Model with all predictors", Accuracy=m7))
+overall_accuracy
+
+```
+The overall accuracy great improves. We will try improve this slightly more. 
+
+### Model 8: Classification (Decision) Trees Model 2 (with significant variables)
+In this model only the variables that had significant p-values in the Wilcoxon Signed Rank test will be used.
+```{r Model 8}
+#Model 8- Classification (Decision) Trees Model with significant variables
+train_rpart <- train(Dataset ~ Age+ Total_Bilirubin + Direct_Bilirubin + Alkaline_Phosphotase + Alamine_Aminotransferase + Aspartate_Aminotransferase + Albumin + Albumin_and_Globulin_Ratio,
+                     method = "rpart",
+                     tuneGrid = data.frame(cp = seq(0.0, 0.1, len = 25)),
+                     data = train_set)
+plot(train_rpart)
+confusionMatrix(predict(train_rpart,test_set),test_set$Dataset)
+m8<- confusionMatrix(predict(train_rpart,test_set),test_set$Dataset)$overall["Accuracy"]
+overall_accuracy<- bind_rows(overall_accuracy, tibble(model="Classification Decision Trees Model with 8 predictors", Accuracy=m8))
+overall_accuracy
+
+```
+
+## Results 
+```{r Results}
+print.data.frame(overall_accuracy)
+```
+From the results we can see that the classification trees model performed the best. The predictors used is either all or 8 significant variables.
+
+## Conclusion
+In this project various models have been tested to build a prediction algorithm for doctors to diagnose liver disease. The overall accuracy results show generally all the variables can be used as predictors. However it is suggested that the 8 significant ones are used for the algorithm. Overall, the Logistic Regression model did't perform well and the Classification Trees model performed the best. A limitation of the dataset is that it comes from a very niche group of people and the observations are very few. In future a larger dataset from people accross different regions can be obtained to improve the algorithm. Some kind of clustering categorization also could be added to see if there if any of the variables tend to cluster in a certain group of patients. Additional history of the patient diet and lifestyle could also be added to the clinical variables as it might enhance the prediction. 
